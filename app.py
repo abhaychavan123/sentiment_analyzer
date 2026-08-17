@@ -1,10 +1,9 @@
 import streamlit as st
 import pickle
-import pandas as pd
-import numpy as np
 import os
+import numpy as np
+import pandas as pd
 
-# Set page configuration
 st.set_page_config(
     page_title="Sentiment Sense AI",
     page_icon="💬",
@@ -12,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling (Modern UI with cards, clean typography, and smooth colors)
+# Custom Styling
 st.markdown("""
     <style>
     .main {
@@ -31,8 +30,9 @@ st.markdown("""
         border-radius: 12px;
         margin: 1rem 0;
         text-align: center;
-        font-size: 1.25rem;
-        font-weight: 600;
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
     }
     .positive {
         background-color: #dcfce7;
@@ -44,21 +44,16 @@ st.markdown("""
         color: #b91c1c;
         border: 1px solid #fca5a5;
     }
-    .neutral {
-        background-color: #f1f5f9;
-        color: #475569;
-        border: 1px solid #cbd5e1;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# Load model and vectorizer with caching
+# Load the pickle files
 @st.cache_resource
 def load_assets():
-    model_path = "model.pkl"
-    vectorizer_path = "vectorizer.pkl"
+    model_path = "sentiment_model.pkl"
+    vectorizer_path = "sentiment_vector.pkl"
     
-    # Fallback checks if file names differ slightly
+    # Fallback to look for similar filenames if renamed
     if not os.path.exists(model_path):
         for f in os.listdir("."):
             if "model" in f.lower() and f.endswith(".pkl"):
@@ -67,7 +62,7 @@ def load_assets():
 
     if not os.path.exists(vectorizer_path):
         for f in os.listdir("."):
-            if ("vectorizer" in f.lower() or "tfidf" in f.lower() or "cv" in f.lower()) and f.endswith(".pkl"):
+            if ("vector" in f.lower() or "tfidf" in f.lower()) and f.endswith(".pkl"):
                 vectorizer_path = f
                 break
 
@@ -82,38 +77,37 @@ def load_assets():
 
 model, vectorizer, err_msg = load_assets()
 
-# Sidebar Setup
+# Sidebar
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3073/3073445.png", width=70)
     st.title("Sentiment AI")
-    st.markdown("Analyze text tone and emotions instantly using machine learning.")
+    st.markdown("Analyze feedback, customer reviews, and general text sentiment instantly.")
     
     st.markdown("---")
-    st.subheader("⚙️ System Status")
+    st.subheader("⚙️ Model Pipeline Status")
     if model and vectorizer:
-        st.success("Artifacts Loaded Successfully")
+        st.success("Artifacts Loaded (`sentiment_model.pkl` & `sentiment_vector.pkl`)")
     else:
-        st.error("Missing `.pkl` files")
+        st.error("Model assets not detected")
         if err_msg:
             st.caption(f"Error: {err_msg}")
-        st.info("Ensure `model.pkl` and `vectorizer.pkl` exist in the root folder.")
+        st.info("Ensure `sentiment_model.pkl` and `sentiment_vector.pkl` are committed to your repository.")
 
     st.markdown("---")
-    st.subheader("💡 Try Samples")
+    st.subheader("💡 Example Presets")
     sample_text = st.selectbox(
-        "Select a quick sample:",
+        "Try an example:",
         [
             "Select an example...",
-            "The customer service was phenomenal, absolutely loved it!",
-            "Completely disappointed. It stopped working after two days.",
-            "The delivery was on time. The package arrived safely."
+            "The movie was absolutely fantastic, brilliant acting and storytelling!",
+            "Completely terrible waste of time. Poor direction and horrible script.",
+            "I really enjoyed the cinematography and the pacing was perfect."
         ]
     )
 
-# Header Section
+# Main UI
 st.title("💬 Real-Time Sentiment Analysis")
-st.caption("Extract emotional polarity, classification confidence, and key metrics from raw text.")
-
+st.caption("Multinomial Naive Bayes classifier trained with TF-IDF vectorization.")
 st.markdown("---")
 
 tab1, tab2 = st.tabs(["📝 Single Text Analysis", "📂 Batch CSV Analysis"])
@@ -123,62 +117,50 @@ with tab1:
 
     with col_input:
         st.subheader("Input Text")
-        
-        # Populate with sample or user input
         default_val = sample_text if sample_text != "Select an example..." else ""
         user_input = st.text_area(
-            "Enter customer review, tweet, or feedback:",
+            "Enter text or feedback:",
             value=default_val,
             height=180,
-            placeholder="Type or paste your text here..."
+            placeholder="Type your review or text here..."
         )
 
-        col_btn, col_clear = st.columns([1, 1])
-        with col_btn:
-            analyze_btn = st.button("🚀 Analyze Sentiment", use_container_width=True, type="primary")
+        analyze_btn = st.button("🚀 Analyze Sentiment", use_container_width=True, type="primary")
 
     with col_result:
-        st.subheader("Prediction")
+        st.subheader("Prediction Result")
         
         if analyze_btn:
             if not user_input.strip():
-                st.warning("Please enter some text to analyze.")
+                st.warning("Please enter text to analyze.")
             elif not model or not vectorizer:
-                st.error("Model assets not loaded. Please verify your `.pkl` files.")
+                st.error("Model or vectorizer file is missing from repository root.")
             else:
-                with st.spinner("Classifying sentiment..."):
-                    # Vectorize input
+                with st.spinner("Classifying..."):
                     vec_text = vectorizer.transform([user_input])
                     prediction = model.predict(vec_text)[0]
                     
-                    # Probability calculation (if supported by model)
+                    # Calculate probabilities
                     confidence = None
                     if hasattr(model, "predict_proba"):
                         proba = model.predict_proba(vec_text)[0]
                         confidence = np.max(proba) * 100
 
-                    # Format label
                     pred_str = str(prediction).lower()
                     if pred_str in ["1", "positive", "pos"]:
                         label = "Positive"
                         css_class = "positive"
                         icon = "🟢 😊"
-                    elif pred_str in ["0", "negative", "neg", "-1"]:
+                    else:
                         label = "Negative"
                         css_class = "negative"
                         icon = "🔴 😞"
-                    else:
-                        label = "Neutral"
-                        css_class = "neutral"
-                        icon = "⚪ 😐"
 
-                    # Display card
                     st.markdown(
-                        f'<div class="sentiment-box {css_class}">{icon} {label}</div>',
+                        f'<div class="sentiment-box {css_class}">{icon} {label.upper()}</div>',
                         unsafe_allow_html=True
                     )
 
-                    # Display metrics
                     m_col1, m_col2 = st.columns(2)
                     with m_col1:
                         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
@@ -192,31 +174,30 @@ with tab1:
                         st.subheader(f"{confidence:.1f}%" if confidence is not None else "N/A")
                         st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.info("Enter text and click **Analyze Sentiment** to see the classification.")
+            st.info("Enter text and click **Analyze Sentiment** to see the result.")
 
 with tab2:
     st.subheader("Upload CSV for Bulk Analysis")
-    uploaded_file = st.file_uploader("Upload a CSV file with a text column", type=["csv"])
+    uploaded_file = st.file_uploader("Upload a CSV file containing a text column", type=["csv"])
     
     if uploaded_file and model and vectorizer:
         df = pd.read_csv(uploaded_file)
         st.write("Data Preview:", df.head(3))
         
-        text_column = st.selectbox("Select text column for prediction:", df.columns)
+        text_column = st.selectbox("Select text column to analyze:", df.columns)
         
         if st.button("Run Batch Prediction", type="primary"):
-            with st.spinner("Processing batch data..."):
+            with st.spinner("Processing batch records..."):
                 texts = df[text_column].fillna("").astype(str)
                 vec_batch = vectorizer.transform(texts)
                 df["Predicted_Sentiment"] = model.predict(vec_batch)
                 
-                st.success("Analysis complete!")
+                st.success("Batch processing complete!")
                 
-                col_chart, col_table = st.columns([1, 2])
-                with col_chart:
+                c1, c2 = st.columns([1, 2])
+                with c1:
                     st.write("**Sentiment Distribution**")
                     st.bar_chart(df["Predicted_Sentiment"].value_counts())
-                
-                with col_table:
-                    st.write("**Processed Records**")
+                with c2:
+                    st.write("**Predictions Table**")
                     st.dataframe(df, use_container_width=True)
